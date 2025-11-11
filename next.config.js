@@ -5,6 +5,12 @@
 import "./src/env.js";
 
 /** @type {import("next").NextConfig} */
-const config = {};
+const config = {
+	transpilePackages: [
+		"@plait/mind",
+		"@plait-board/react-board",
+		"@plait-board/react-text",
+	],
+};
 
 export default config;

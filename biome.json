@@ -24,6 +24,9 @@
 		"enabled": true,
 		"rules": {
 			"recommended": true,
+			"complexity": {
+				"noImportantStyles": "off"
+			},
 			"nursery": {
 				"useSortedClasses": {
 					"level": "warn",
