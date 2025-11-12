@@ -1,6 +1,7 @@
 import type { PlaitElement, PlaitTheme, Viewport } from '@plait/core'
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import { indexedDBStorage } from '@/stores/indexed-db-storage'
 
 export interface MindmapData {
   children: PlaitElement[]
@@ -55,6 +56,7 @@ export const useMindmapStore = create<MindmapStore>()(
     }),
     {
       name: 'mindmap-state',
+      storage: createJSONStorage(() => indexedDBStorage),
     },
   ),
 )
