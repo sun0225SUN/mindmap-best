@@ -18,6 +18,7 @@
     "@plait-board/markdown-to-drawnix": "^0.0.7",
     "@plait-board/react-board": "0.4.0-0",
     "@plait-board/react-text": "0.4.0-0",
+    "@radix-ui/react-popover": "^1.1.15",
     "@t3-oss/env-nextjs": "^0.13.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
