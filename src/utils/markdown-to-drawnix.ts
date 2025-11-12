@@ -1,25 +1,25 @@
-import type { PlaitElement } from "@plait/core";
+import type { PlaitElement } from '@plait/core'
 
 export async function parseMarkdownToDrawnixWrapper(
-	markdown: string,
+  markdown: string,
 ): Promise<PlaitElement[]> {
-	if (!markdown?.trim()) {
-		return [];
-	}
+  if (!markdown?.trim()) {
+    return []
+  }
 
-	try {
-		const { parseMarkdownToDrawnix } = await import(
-			"@plait-board/markdown-to-drawnix"
-		);
-		const result = parseMarkdownToDrawnix(markdown);
+  try {
+    const { parseMarkdownToDrawnix } = await import(
+      '@plait-board/markdown-to-drawnix'
+    )
+    const result = parseMarkdownToDrawnix(markdown)
 
-		if (!result) {
-			return [];
-		}
+    if (!result) {
+      return []
+    }
 
-		return [result as PlaitElement];
-	} catch (error) {
-		console.error("Parse error:", error);
-		return [];
-	}
+    return [result as PlaitElement]
+  } catch (error) {
+    console.error('Parse error:', error)
+    return []
+  }
 }
