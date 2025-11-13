@@ -3,8 +3,8 @@
 import '@/styles/mindmap/react-board.css'
 import '@/styles/mindmap/react-text.css'
 import '@/styles/mindmap/styles.scss'
-import '@/styles/mindmap/custom.css'
 
+import type { StrokeStyle } from '@plait/common'
 import { withGroup } from '@plait/common'
 import type {
   PlaitBoard,
@@ -13,15 +13,14 @@ import type {
   PlaitPlugin,
   PlaitTheme,
 } from '@plait/core'
-import { ThemeColorMode } from '@plait/core'
+import { ThemeColorMode, Transforms, updateViewBox } from '@plait/core'
 import { withDraw } from '@plait/draw'
-import type { MindLayoutType } from '@plait/layouts'
 import { MindLayoutType as MindLayoutTypeEnum } from '@plait/layouts'
 import type { MindElement } from '@plait/mind'
 import {
-  MindElement as MindElementUtils,
+  BranchShape,
+  type MindElementShape,
   MindThemeColors,
-  MindTransforms,
   withMind,
 } from '@plait/mind'
 import {
@@ -30,11 +29,12 @@ import {
   useBoard,
   Wrapper,
 } from '@plait-board/react-board'
-import { Layout } from 'lucide-react'
+import { produce } from 'immer'
 import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Tools } from '@/components/mindmap/tools'
+import { Zoom } from '@/components/mindmap/tools/zoom'
 import { useMindmapStore } from '@/stores/mindmap-store'
-import { LayoutPopover } from './layout-popover'
 
 const BOARD_OPTIONS: PlaitBoardOptions = {
   readonly: true,
@@ -83,19 +83,22 @@ export function MindMap() {
     children,
     viewport,
     theme: storedTheme,
+    spline,
+    lineStrokeStyle,
+    lineStrokeWidth,
+    lineStrokeColor,
+    nodeShape,
     updateData,
   } = useMindmapStore()
   const { resolvedTheme } = useTheme()
   const [isMounted, setIsMounted] = useState(false)
   const [isReady, setIsReady] = useState(false)
-  const [currentLayout, setCurrentLayout] = useState<
-    MindLayoutType | undefined
-  >()
   const boardRef = useRef<PlaitBoard | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const valueRef = useRef(children)
   const previousChildrenLengthRef = useRef(children?.length ?? 0)
   const hasInitializedRef = useRef(false)
+  const previousLineStrokeColorRef = useRef<string | undefined>(lineStrokeColor)
 
   useEffect(() => {
     const currentLength = children?.length ?? 0
@@ -103,15 +106,11 @@ export function MindMap() {
 
     if (previousLength === 0 && currentLength > 0) {
       updateData({ viewport: undefined })
-    }
-
-    if (!hasInitializedRef.current && currentLength > 0 && viewport) {
-      updateData({ viewport: undefined })
       hasInitializedRef.current = true
     }
 
     previousChildrenLengthRef.current = currentLength
-  }, [children, viewport, updateData])
+  }, [children, updateData])
 
   const theme = useMemo((): PlaitTheme | undefined => {
     if (!resolvedTheme) return storedTheme
@@ -139,96 +138,229 @@ export function MindMap() {
     boardRef.current = board
   }, [])
 
+  useEffect(() => {
+    if (!boardRef.current || !viewport) return
+
+    const board = boardRef.current
+    if (board.viewport.zoom !== viewport.zoom) {
+      Transforms.setViewport(board, viewport)
+
+      requestAnimationFrame(() => {
+        try {
+          updateViewBox(board)
+        } catch (error) {
+          console.warn('Failed to update viewBox:', error)
+        }
+      })
+    }
+  }, [viewport])
+
+  const updateBranchShapeRecursively = useCallback(
+    (element: MindElement, branchShape: BranchShape) => {
+      element.branchShape = branchShape
+      if (element.children && Array.isArray(element.children)) {
+        for (const child of element.children) {
+          if (
+            child &&
+            typeof child === 'object' &&
+            'type' in child &&
+            (child.type === 'mindmap' ||
+              child.type === 'mind' ||
+              child.type === 'mind_child')
+          ) {
+            updateBranchShapeRecursively(child as MindElement, branchShape)
+          }
+        }
+      }
+    },
+    [],
+  )
+
+  const updateLineStyleRecursively = useCallback(
+    (
+      element: MindElement,
+      strokeStyle?: StrokeStyle,
+      strokeWidth?: number,
+      strokeColor?: string | null,
+    ) => {
+      if (strokeStyle !== undefined) {
+        element.strokeStyle = strokeStyle
+      }
+      if (strokeWidth !== undefined) {
+        element.strokeWidth = strokeWidth
+        element.branchWidth = strokeWidth
+      }
+      if (strokeColor !== undefined) {
+        if (strokeColor === null) {
+          delete element.strokeColor
+          delete element.branchColor
+        } else {
+          element.strokeColor = strokeColor
+          element.branchColor = strokeColor
+        }
+      }
+      if (element.children && Array.isArray(element.children)) {
+        for (const child of element.children) {
+          if (
+            child &&
+            typeof child === 'object' &&
+            'type' in child &&
+            (child.type === 'mindmap' ||
+              child.type === 'mind' ||
+              child.type === 'mind_child')
+          ) {
+            updateLineStyleRecursively(
+              child as MindElement,
+              strokeStyle,
+              strokeWidth,
+              strokeColor,
+            )
+          }
+        }
+      }
+    },
+    [],
+  )
+
+  const updateNodeShapeRecursively = useCallback(
+    (element: MindElement, shape: MindElementShape) => {
+      element.shape = shape
+      if (element.children && Array.isArray(element.children)) {
+        for (const child of element.children) {
+          if (
+            child &&
+            typeof child === 'object' &&
+            'type' in child &&
+            (child.type === 'mindmap' ||
+              child.type === 'mind' ||
+              child.type === 'mind_child')
+          ) {
+            updateNodeShapeRecursively(child as MindElement, shape)
+          }
+        }
+      }
+    },
+    [],
+  )
+
   const normalizedValue = useMemo((): PlaitElement[] => {
     if (!Array.isArray(children) || children.length === 0) return []
 
-    return children.map((item) => {
-      if (
-        item &&
-        typeof item === 'object' &&
-        'type' in item &&
-        item.type === 'mindmap'
-      ) {
-        return {
-          ...item,
-          isRoot: item.isRoot ?? true,
-          points:
+    return produce(children, (draft) => {
+      for (const item of draft) {
+        if (
+          item &&
+          typeof item === 'object' &&
+          'type' in item &&
+          item.type === 'mindmap'
+        ) {
+          item.isRoot = item.isRoot ?? true
+          item.points =
             Array.isArray(item.points) && item.points.length > 0
               ? item.points
-              : [[400, 300]],
-        } as PlaitElement
-      }
-      return item
-    })
-  }, [children])
-
-  const handleLayoutChange = useCallback(
-    (layout: MindLayoutType) => {
-      if (boardRef.current) {
-        MindTransforms.setLayout(boardRef.current, layout)
-        setCurrentLayout(layout)
-
-        if (layout === MindLayoutTypeEnum.standard) {
-          const rootElement = normalizedValue.find(
-            (item): item is MindElement =>
-              item &&
-              typeof item === 'object' &&
-              'type' in item &&
-              item.type === 'mindmap' &&
-              MindElementUtils.isMindElement(boardRef.current, item),
-          )
-
-          if (rootElement?.children) {
-            const childCount = rootElement.children.length
-            const rightNodeCount =
-              childCount > 0 ? Math.ceil(childCount / 2) : 0
-
-            const updatedChildren = children.map((item) => {
-              if (
-                item &&
-                typeof item === 'object' &&
-                'type' in item &&
-                item.type === 'mindmap' &&
-                item.id === rootElement.id
-              ) {
-                return {
-                  ...item,
-                  layout,
-                  rightNodeCount,
-                } as PlaitElement
+              : [[400, 300]]
+          if (spline !== undefined) {
+            const branchShape = spline
+              ? BranchShape.bight
+              : BranchShape.polyline
+            item.branchShape = branchShape
+            if (item.children && Array.isArray(item.children)) {
+              for (const child of item.children) {
+                if (
+                  child &&
+                  typeof child === 'object' &&
+                  'type' in child &&
+                  (child.type === 'mindmap' ||
+                    child.type === 'mind' ||
+                    child.type === 'mind_child')
+                ) {
+                  updateBranchShapeRecursively(
+                    child as MindElement,
+                    branchShape,
+                  )
+                }
               }
-              return item
-            })
+            }
+          }
+          const shouldUpdateLineStyle =
+            lineStrokeStyle !== undefined ||
+            lineStrokeWidth !== undefined ||
+            lineStrokeColor !== undefined ||
+            (previousLineStrokeColorRef.current !== undefined &&
+              lineStrokeColor === undefined)
 
-            updateData({ children: updatedChildren })
-            return
+          if (shouldUpdateLineStyle) {
+            updateLineStyleRecursively(
+              item as MindElement,
+              lineStrokeStyle,
+              lineStrokeWidth,
+              lineStrokeColor === undefined ? null : lineStrokeColor,
+            )
+          }
+          if (nodeShape !== undefined) {
+            updateNodeShapeRecursively(item as MindElement, nodeShape)
           }
         }
-
-        requestAnimationFrame(() => {
-          const updatedChildren = children.map((item) => {
-            if (
-              item &&
-              typeof item === 'object' &&
-              'type' in item &&
-              item.type === 'mindmap'
-            ) {
-              return {
-                ...item,
-                layout,
-                ...(layout !== MindLayoutTypeEnum.standard && {
-                  rightNodeCount: undefined,
-                }),
-              } as PlaitElement
-            }
-            return item
-          })
-
-          updateData({ children: updatedChildren })
-        })
       }
+    })
+  }, [
+    children,
+    spline,
+    lineStrokeStyle,
+    lineStrokeWidth,
+    lineStrokeColor,
+    nodeShape,
+    updateBranchShapeRecursively,
+    updateLineStyleRecursively,
+    updateNodeShapeRecursively,
+  ])
+
+  useEffect(() => {
+    previousLineStrokeColorRef.current = lineStrokeColor
+  }, [lineStrokeColor])
+
+  const compareElementsIgnoringCollapse = useCallback(
+    (a: PlaitElement, b: PlaitElement): boolean => {
+      const normalizeElement = (el: PlaitElement): Record<string, unknown> => {
+        const normalized: Record<string, unknown> = { ...el }
+        delete normalized.collapsed
+        delete normalized.isCollapsed
+        if ('children' in normalized && Array.isArray(normalized.children)) {
+          normalized.children = (normalized.children as PlaitElement[]).map(
+            (child) => normalizeElement(child),
+          )
+        }
+        return normalized
+      }
+
+      return (
+        JSON.stringify(normalizeElement(a)) ===
+        JSON.stringify(normalizeElement(b))
+      )
     },
-    [children, normalizedValue, updateData],
+    [],
+  )
+
+  const hasStructuralChange = useCallback(
+    (boardChildren: PlaitElement[], storeChildren: PlaitElement[]): boolean => {
+      if (boardChildren.length !== storeChildren.length) {
+        return true
+      }
+
+      for (let i = 0; i < boardChildren.length; i++) {
+        const boardChild = boardChildren[i]
+        const storeChild = storeChildren[i]
+        if (!boardChild || !storeChild) {
+          return true
+        }
+        if (!compareElementsIgnoringCollapse(boardChild, storeChild)) {
+          return true
+        }
+      }
+
+      return false
+    },
+    [compareElementsIgnoringCollapse],
   )
 
   const handleMindChange = useCallback(
@@ -249,16 +381,17 @@ export function MindMap() {
 
       if (boardRef.current?.children) {
         const boardChildren = boardRef.current.children
-        if (JSON.stringify(boardChildren) !== JSON.stringify(children)) {
-          updatePayload.children = JSON.parse(
-            JSON.stringify(boardChildren),
+        if (hasStructuralChange(boardChildren, children)) {
+          updatePayload.children = produce(
+            boardChildren,
+            () => {},
           ) as PlaitElement[]
         }
       }
 
       updateData(updatePayload)
     },
-    [updateData, theme, children],
+    [updateData, theme, children, hasStructuralChange],
   )
 
   useEffect(() => {
@@ -271,10 +404,6 @@ export function MindMap() {
     )
 
     if (mindmapElement) {
-      if (mindmapElement.layout) {
-        setCurrentLayout(mindmapElement.layout)
-      }
-
       if (
         mindmapElement.layout === MindLayoutTypeEnum.standard &&
         mindmapElement.children &&
@@ -283,20 +412,18 @@ export function MindMap() {
         const childCount = mindmapElement.children.length
         const rightNodeCount = childCount > 0 ? Math.ceil(childCount / 2) : 0
 
-        const updatedChildren = children.map((item) => {
-          if (
-            item &&
-            typeof item === 'object' &&
-            'type' in item &&
-            item.type === 'mindmap' &&
-            item.id === mindmapElement.id
-          ) {
-            return {
-              ...item,
-              rightNodeCount,
-            } as PlaitElement
+        const updatedChildren = produce(children, (draft) => {
+          for (const item of draft) {
+            if (
+              item &&
+              typeof item === 'object' &&
+              'type' in item &&
+              item.type === 'mindmap' &&
+              item.id === mindmapElement.id
+            ) {
+              item.rightNodeCount = rightNodeCount
+            }
           }
-          return item
         })
 
         updateData({ children: updatedChildren })
@@ -307,6 +434,91 @@ export function MindMap() {
   useEffect(() => {
     setIsMounted(true)
   }, [])
+
+  const splineRef = useRef(spline)
+  const previousThemeRef = useRef(theme?.themeColorMode)
+
+  useEffect(() => {
+    if (
+      spline === undefined ||
+      spline === splineRef.current ||
+      !boardRef.current
+    ) {
+      splineRef.current = spline
+      return
+    }
+
+    const expectedBranchShape = spline
+      ? BranchShape.bight
+      : BranchShape.polyline
+
+    const checkBranchShapeChange = (element: MindElement): boolean => {
+      if (element.branchShape !== expectedBranchShape) {
+        return true
+      }
+      if (element.children && Array.isArray(element.children)) {
+        return element.children.some((child) => {
+          if (
+            child &&
+            typeof child === 'object' &&
+            'type' in child &&
+            (child.type === 'mindmap' ||
+              child.type === 'mind' ||
+              child.type === 'mind_child')
+          ) {
+            return checkBranchShapeChange(child as MindElement)
+          }
+          return false
+        })
+      }
+      return false
+    }
+
+    const hasBranchShapeChange = children.some((item) => {
+      if (
+        item &&
+        typeof item === 'object' &&
+        'type' in item &&
+        item.type === 'mindmap'
+      ) {
+        return checkBranchShapeChange(item as MindElement)
+      }
+      return false
+    })
+
+    if (hasBranchShapeChange) {
+      const updatedChildren = produce(children, (draft) => {
+        for (const item of draft) {
+          if (
+            item &&
+            typeof item === 'object' &&
+            'type' in item &&
+            item.type === 'mindmap'
+          ) {
+            updateBranchShapeRecursively(
+              item as MindElement,
+              expectedBranchShape,
+            )
+          }
+        }
+      })
+
+      updateData({ children: updatedChildren })
+    }
+
+    splineRef.current = spline
+  }, [spline, children, updateData, updateBranchShapeRecursively])
+
+  useEffect(() => {
+    const currentThemeMode = theme?.themeColorMode
+    if (
+      previousThemeRef.current !== undefined &&
+      currentThemeMode !== previousThemeRef.current
+    ) {
+      updateData({ viewport: undefined })
+    }
+    previousThemeRef.current = currentThemeMode
+  }, [theme?.themeColorMode, updateData])
 
   useEffect(() => {
     if (!isMounted || !containerRef.current) return
@@ -360,9 +572,8 @@ export function MindMap() {
 
   return (
     <div
-      className='h-full w-full'
+      className='relative h-full w-full overflow-hidden'
       ref={containerRef}
-      style={{ position: 'relative', overflow: 'hidden' }}
     >
       <Wrapper
         key={theme?.themeColorMode ?? 'default'}
@@ -376,20 +587,12 @@ export function MindMap() {
         <BoardWithLayoutControl onBoardReady={handleBoardReady} />
       </Wrapper>
 
-      <div className='absolute right-4 bottom-4 z-10'>
-        <LayoutPopover
-          currentLayout={currentLayout}
-          onLayoutChange={handleLayoutChange}
-          trigger={
-            <button
-              className='flex items-center justify-center rounded-lg border bg-background p-2 shadow-lg transition-all hover:bg-muted'
-              title='Change Layout'
-              type='button'
-            >
-              <Layout className='h-5 w-5' />
-            </button>
-          }
-        />
+      <div className='absolute top-5 right-5 z-10'>
+        <Zoom board={boardRef.current} />
+      </div>
+
+      <div className='absolute right-5 bottom-5 z-10'>
+        <Tools board={boardRef.current} />
       </div>
     </div>
   )

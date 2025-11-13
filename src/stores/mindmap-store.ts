@@ -1,4 +1,6 @@
+import { StrokeStyle } from '@plait/common'
 import type { PlaitElement, PlaitTheme, Viewport } from '@plait/core'
+import { MindElementShape } from '@plait/mind'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { indexedDBStorage } from '@/stores/indexed-db-storage'
@@ -8,6 +10,12 @@ export interface MindmapData {
   viewport?: Viewport
   theme?: PlaitTheme
   markdown?: string
+  spline?: boolean
+  presentationMode?: boolean
+  lineStrokeStyle?: StrokeStyle
+  lineStrokeWidth?: number
+  lineStrokeColor?: string
+  nodeShape?: MindElementShape
 }
 
 const DEMO_MARKDOWN = `# 我开始了
@@ -38,6 +46,12 @@ export const useMindmapStore = create<MindmapStore>()(
       viewport: undefined,
       theme: undefined,
       markdown: '',
+      spline: false,
+      presentationMode: false,
+      lineStrokeStyle: StrokeStyle.solid,
+      lineStrokeWidth: 2,
+      lineStrokeColor: undefined,
+      nodeShape: MindElementShape.roundRectangle,
       updateData: (data) => set((state) => ({ ...state, ...data })),
       updateMarkdown: (markdown) => set({ markdown }),
       loadDemo: () =>
@@ -52,6 +66,12 @@ export const useMindmapStore = create<MindmapStore>()(
           viewport: undefined,
           theme: undefined,
           markdown: '',
+          spline: false,
+          presentationMode: false,
+          lineStrokeStyle: StrokeStyle.solid,
+          lineStrokeWidth: 2,
+          lineStrokeColor: undefined,
+          nodeShape: MindElementShape.roundRectangle,
         }),
     }),
     {

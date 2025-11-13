@@ -2,8 +2,8 @@
 
 import type { OnChange } from '@monaco-editor/react'
 import Editor from '@monaco-editor/react'
-import type { PlaitElement } from '@plait/core'
 import type { MindLayoutType } from '@plait/layouts'
+import { produce } from 'immer'
 import { useTheme } from 'next-themes'
 import { useEffect, useRef } from 'react'
 import { useMindmapStore } from '@/stores/mindmap-store'
@@ -50,22 +50,15 @@ export function MarkdownEditor() {
       try {
         const mind = await parseMarkdownToDrawnixWrapper(currentMarkdown)
         if (mind?.length) {
-          const newMindmap = mind[0]
-
-          if (layoutRef.current?.layout) {
-            const updatedMind = [
-              {
-                ...newMindmap,
-                layout: layoutRef.current.layout,
-                ...(layoutRef.current.rightNodeCount !== undefined && {
-                  rightNodeCount: layoutRef.current.rightNodeCount,
-                }),
-              } as PlaitElement,
-            ]
-            updateData({ children: updatedMind })
-          } else {
-            updateData({ children: mind })
-          }
+          const updatedMind = produce(mind, (draft) => {
+            if (layoutRef.current?.layout && draft[0]) {
+              draft[0].layout = layoutRef.current.layout
+              if (layoutRef.current.rightNodeCount !== undefined) {
+                draft[0].rightNodeCount = layoutRef.current.rightNodeCount
+              }
+            }
+          })
+          updateData({ children: updatedMind })
         } else {
           updateData({ children: [] })
         }
