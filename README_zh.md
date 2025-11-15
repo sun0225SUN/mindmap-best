@@ -199,10 +199,6 @@ mindmap-best/
 - [Next.js](https://nextjs.org) - React 框架
 - 所有使这个项目成为可能的开源贡献者
 
-## 📊 仓库状态
-
-![Alt](https://repobeats.axiom.co/api/embed/YOUR_REPO_ID.svg "Repobeats analytics image")
-
 ## ⭐ Star 历史
 
 [![Star History Chart](https://api.star-history.com/svg?repos=sun0225SUN/mindmap-best&type=Date)](https://github.com/sun0225SUN/mindmap-best)
